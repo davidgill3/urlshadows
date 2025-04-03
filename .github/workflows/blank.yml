@@ -1,18 +1,39 @@
-name: Check and Free Disk Space
+name: Install exatorrent on GitHub Actions
 
 on:
   push:
-    branches:
-      - main  # Trigger on push to main branch (adjust as needed)
-  workflow_dispatch:  # Manually trigger from GitHub UI
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  disk_space:
-    runs-on: ubuntu-latest  # You can change this to another runner if needed
+  install_exatorrent:
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Free Disk Space (Ubuntu)
-      uses: jlumbroso/free-disk-space@v1.3.1
+      # Download and install exatorrent
+      - name: Install exatorrent
+        run: |
+          # Create a directory in /mnt (where space is available)
+          sudo mkdir -p /mnt/exatorrent
+          cd /mnt/exatorrent
 
-    - name: Check Available Disk Space
-      run: df -h
+          # Download the latest exatorrent binary (Linux amd64)
+          EXATORRENT_URL=$(curl -s https://api.github.com/repos/varbhat/exatorrent/releases/latest | grep "browser_download_url.*linux-amd64" | cut -d '"' -f 4)
+          wget -O exatorrent "$EXATORRENT_URL"
+          chmod +x exatorrent
+
+          # (Optional) Verify checksum
+          # SHA256_URL=$(curl -s https://api.github.com/repos/varbhat/exatorrent/releases/latest | grep "browser_download_url.*checksums" | cut -d '"' -f 4)
+          # wget -O checksums.txt "$SHA256_URL"
+          # sha256sum -c checksums.txt --ignore-missing
+
+          # Run exatorrent (default port: 5000)
+          ./exatorrent &
+
+          # Check if it's running
+          sleep 5
+          curl -s http://localhost:5000 || echo "exatorrent may not be running"
+
+      # (Optional) Persist data in /mnt/exatorrent
+      - name: List downloaded files
+        run: ls -lh /mnt/exatorrent
