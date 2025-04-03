@@ -9,7 +9,7 @@ on:
 jobs:
   disk_space:
     runs-on: ubuntu-latest  # You can change this to another runner if needed
-    
+
     steps:
     - name: Free Disk Space (Ubuntu)
-       uses: jlumbroso/free-disk-space@v1.3.1
+      uses: jlumbroso/free-disk-space@v1.3.1
