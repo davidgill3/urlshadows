@@ -10,30 +10,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Download and install exatorrent
-      - name: Install exatorrent
+        # Run exatorrent in Docker with /mnt storage
+      - name: Run exatorrent container
         run: |
-          # Create a directory in /mnt (where space is available)
-          sudo mkdir -p /mnt/exatorrent
-          cd /mnt/exatorrent
+          # Create a directory for exatorrent data in /mnt (where space is available)
+          sudo mkdir -p /mnt/exatorrent/data
+          sudo chown -R 1000:1000 /mnt/exatorrent/data  # Ensure container user can write
 
-          # Download the latest exatorrent binary (Linux amd64)
-          EXATORRENT_URL=$(curl -s https://api.github.com/repos/varbhat/exatorrent/releases/latest | grep "browser_download_url.*linux-amd64" | cut -d '"' -f 4)
-          wget -O exatorrent "$EXATORRENT_URL"
-          chmod +x exatorrent
+          # Run the container (port 5000, persistent storage in /mnt)
+          docker run -d \
+            --name exatorrent \
+            -v /mnt/exatorrent/data:/app/data \
+            -p 5000:5000 \
+            varbhat/exatorrent
 
-          # (Optional) Verify checksum
-          # SHA256_URL=$(curl -s https://api.github.com/repos/varbhat/exatorrent/releases/latest | grep "browser_download_url.*checksums" | cut -d '"' -f 4)
-          # wget -O checksums.txt "$SHA256_URL"
-          # sha256sum -c checksums.txt --ignore-missing
-
-          # Run exatorrent (default port: 5000)
-          ./exatorrent &
-
-          # Check if it's running
+          # Verify it's running
           sleep 5
           curl -s http://localhost:5000 || echo "exatorrent may not be running"
 
-      # (Optional) Persist data in /mnt/exatorrent
-      - name: List downloaded files
-        run: ls -lh /mnt/exatorrent
+      # Check disk space and container status
+      - name: Verify setup
+        run: |
+          df -h
+          docker ps
+      
