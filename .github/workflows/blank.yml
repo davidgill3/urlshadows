@@ -8,7 +8,6 @@ on:
 jobs:
   expose_services:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6 hours max (GitHub Free Tier)
 
     steps:
       # Checkout the repository
