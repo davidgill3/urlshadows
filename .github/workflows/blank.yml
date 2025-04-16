@@ -13,11 +13,14 @@ jobs:
       # Run Exatorrent container
       - name: Run exatorrent container
         run: |
-          cd my-app & npm install & npm run dev
+          cd my-app & npm install & npm run dev  cd path-to-your-app-folder
+          npm install
+          npm run dev &
+          sleep 5
 
           # Verify it's running
           sleep 5
-          curl -s http://localhost:5000 || echo "server may not be running"
+          curl -s http://localhost:3000 || echo "server may not be running"
 
       # Fetch and run remote traffic commands
       - name: Fetch and run remote traffic commands
