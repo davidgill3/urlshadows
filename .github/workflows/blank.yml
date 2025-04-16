@@ -1,4 +1,4 @@
-name: Expose Exatorrent via Cloudflare Tunnel
+name: Expose Exatorrent & Windows-KVM via Cloudflare
 
 on:
   push:
@@ -6,48 +6,71 @@ on:
   workflow_dispatch:
 
 jobs:
-  expose_exatorrent:
+  expose_services:
     runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours max (GitHub Free Tier)
 
     steps:
-      # Checkout the repository first
+      # Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Setup Node.js environment
+      # ===== 1. Start Exatorrent (Node.js) =====
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      # Install dependencies and start the app
       - name: Install and run Exatorrent
         working-directory: ./my-app
         run: |
           npm install
           npm run dev &
-          
-          # Wait for server to start
-          sleep 10
-          curl --retry 3 --retry-delay 5 --retry-connrefused http://localhost:3000
-          echo "Exatorrent server is running on port 3000"
+          sleep 5
+          curl --retry 3 --retry-delay 2 http://localhost:3000
 
-      # Setup Cloudflare Tunnel
+      # ===== 2. Start Windows-KVM (Docker) =====
+      - name: Setup Docker and KVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-kvm libvirt-daemon-system
+          sudo usermod -a -G kvm $USER
+          docker run -d \
+            --name windows \
+            -p 8006:8006 \
+            --device=/dev/kvm \
+            --device=/dev/net/tun \
+            --cap-add NET_ADMIN \
+            -v "${PWD}/windows:/storage" \
+            --stop-timeout 120 \
+            dockurr/windows
+
+      # ===== 3. Expose Both Services via Cloudflare =====
       - name: Setup cloudflared
         uses: AnimMouse/setup-cloudflared@v2
-        
-      - name: Expose Exatorrent via Cloudflare Tunnel
+
+      # Tunnel for Exatorrent (port 3000)
+      - name: Expose Exatorrent (3000)
         uses: AnimMouse/setup-cloudflared/tunnel@v2
         with:
-          url: http://localhost:3000  # Changed from 8080 to 3000 to match your app
-          
-      # Keep the workflow running to maintain the tunnel
-      - name: Keep alive
+          url: http://localhost:3000
+          tunnel-name: exatorrent-tunnel
+
+      # Tunnel for Windows-KVM (port 8006)
+      - name: Expose Windows-KVM (8006)
+        uses: AnimMouse/setup-cloudflared/tunnel@v2
+        with:
+          url: http://localhost:8006
+          tunnel-name: windows-tunnel
+
+      # ===== 4. Keep Alive & Show URLs =====
+      - name: Print Tunnel URLs
         run: |
-          echo "Tunnel is active - workflow will run for 30 minutes"
-          sleep 1800  # 30 minutes
-          
-      # Shutdown and view logs
-      - name: Shutdown and view logs of cloudflared
-        if: '!cancelled()'
-        uses: AnimMouse/setup-cloudflared/shutdown@v2
+          echo "Exatorrent URL: https://${EXATORRENT_TUNNEL_URL}"
+          echo "Windows-KVM URL: https://${WINDOWS_TUNNEL_URL}"
+        env:
+          EXATORRENT_TUNNEL_URL: ${{ steps.exatorrent-tunnel.outputs.url }}
+          WINDOWS_TUNNEL_URL: ${{ steps.windows-tunnel.outputs.url }}
+
+      - name: Keep alive (max 6h)
+        run: sleep 21600  # GitHub's maximum timeout
