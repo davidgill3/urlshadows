@@ -33,13 +33,6 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install and run Exatorrent
-        working-directory: ./my-app
-        run: |
-          npm install
-          npm run dev &
-          sleep 5
-          curl --retry 3 --retry-delay 2 http://localhost:3000 || echo "Exatorrent may be starting"
 
       # ===== 3. Start KasmWeb Desktop =====
       - name: Start KasmWeb Desktop
@@ -60,11 +53,6 @@ jobs:
       - name: Setup cloudflared
         uses: AnimMouse/setup-cloudflared@v2
 
-      - name: Expose Exatorrent (3000)
-        uses: AnimMouse/setup-cloudflared/tunnel@v2
-        with:
-          url: http://localhost:3000
-          tunnel-name: exatorrent-tunnel
 
       - name: Expose KasmWeb Desktop (6901)
         uses: AnimMouse/setup-cloudflared/tunnel@v2
@@ -82,6 +70,9 @@ jobs:
         env:
           EXATORRENT_TUNNEL_URL: ${{ steps.exatorrent-tunnel.outputs.url }}
           KASM_TUNNEL_URL: ${{ steps.kasm-tunnel.outputs.url }}
-
+        
+      - name: List running Docker containers
+        run: docker ps
+        
       - name: Keep alive
         run: sleep 21600
