@@ -1,4 +1,4 @@
-name: Expose Exatorrent & KasmWeb Desktop via Cloudflare
+name: Expose Exatorrent & Windows-KVM via Cloudflare
 
 on:
   push:
@@ -8,7 +8,6 @@ on:
 jobs:
   expose_services:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6 hours max (GitHub Free Tier)
 
     steps:
       # Checkout the repository
@@ -27,28 +26,19 @@ jobs:
           npm install
           npm run dev &
           sleep 5
-          curl --retry 3 --retry-delay 2 http://localhost:3000 || echo "Exatorrent may be starting"
+          curl --retry 3 --retry-delay 2 http://localhost:3000
 
-      # ===== 2. Start KasmWeb Desktop (Ubuntu GUI) =====
-      - name: Start KasmWeb Desktop
+      # ===== 2. Start Windows-KVM (Docker) =====
+      - name: Setup Docker and KVM
         run: |
           sudo apt-get update
-          sudo apt-get install -y docker.io
-          sudo systemctl start docker
-
-          # KasmWeb requires 3GB+ RAM - GitHub runners have 7GB
+          sudo apt-get install -y qemu-kvm libvirt-daemon-system
+          sudo usermod -a -G kvm $USER
           docker run -d \
-            --name kasm-desktop \
-            --shm-size=512m \
-            -p 6901:6901 \
-            -e VNC_PW=yourpassword \  # Set your password
-            -e LANG=en_US.UTF-8 \
-            -e LANGUAGE=en_US:en \
-            kasmweb/desktop:1.14.0
-
-          # Wait for Kasm to start
-          sleep 15
-          curl -I http://localhost:6901 || echo "Kasm may need more time"
+           --name windows \
+           -p 8006:8006 \
+           -e "DISABLE_KVM=1" \  # Disable KVM requirement
+           dockurr/windows
 
       # ===== 3. Expose Both Services via Cloudflare =====
       - name: Setup cloudflared
@@ -61,25 +51,21 @@ jobs:
           url: http://localhost:3000
           tunnel-name: exatorrent-tunnel
 
-      # Tunnel for KasmWeb (port 6901)
-      - name: Expose KasmWeb Desktop (6901)
+      # Tunnel for Windows-KVM (port 8006)
+      - name: Expose Windows-KVM (8006)
         uses: AnimMouse/setup-cloudflared/tunnel@v2
         with:
-          url: http://localhost:6901
-          tunnel-name: kasm-tunnel
+          url: http://localhost:8006
+          tunnel-name: windows-tunnel
 
       # ===== 4. Keep Alive & Show URLs =====
       - name: Print Tunnel URLs
         run: |
           echo "Exatorrent URL: https://${EXATORRENT_TUNNEL_URL}"
-          echo "KasmWeb Desktop URL: https://${KASM_TUNNEL_URL}"
-          echo ""
-          echo "KasmWeb Credentials:"
-          echo "Username: kasm_user"
-          echo "Password: yourpassword (set in step 2)"
+          echo "Windows-KVM URL: https://${WINDOWS_TUNNEL_URL}"
         env:
           EXATORRENT_TUNNEL_URL: ${{ steps.exatorrent-tunnel.outputs.url }}
-          KASM_TUNNEL_URL: ${{ steps.kasm-tunnel.outputs.url }}
+          WINDOWS_TUNNEL_URL: ${{ steps.windows-tunnel.outputs.url }}
 
       - name: Keep alive (max 6h)
         run: sleep 21600  # GitHub's maximum timeout
