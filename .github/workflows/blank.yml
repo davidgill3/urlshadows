@@ -8,14 +8,26 @@ on:
 jobs:
   expose_services:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6 hours max (GitHub Free Tier)
+    timeout-minutes: 360  # 6 hours max
 
     steps:
       # Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ===== 1. Start Exatorrent (Node.js) =====
+      # ===== 1. Proper Docker Setup =====
+      - name: Install Docker (correct way)
+        run: |
+          sudo apt-get remove -y containerd docker.io || true
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+          echo \
+            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+            $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+      # ===== 2. Start Exatorrent =====
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
@@ -29,57 +41,47 @@ jobs:
           sleep 5
           curl --retry 3 --retry-delay 2 http://localhost:3000 || echo "Exatorrent may be starting"
 
-      # ===== 2. Start KasmWeb Desktop (Ubuntu GUI) =====
+      # ===== 3. Start KasmWeb Desktop =====
       - name: Start KasmWeb Desktop
         run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
           sudo systemctl start docker
-
-          # KasmWeb requires 3GB+ RAM - GitHub runners have 7GB
           docker run -d \
             --name kasm-desktop \
             --shm-size=512m \
             -p 6901:6901 \
-            -e VNC_PW=yourpassword \  # Set your password
+            -e VNC_PW=yourpassword \
             -e LANG=en_US.UTF-8 \
             -e LANGUAGE=en_US:en \
             kasmweb/desktop:1.14.0
-
-          # Wait for Kasm to start
           sleep 15
-          curl -I http://localhost:6901 || echo "Kasm may need more time"
+          docker logs kasm-desktop
 
-      # ===== 3. Expose Both Services via Cloudflare =====
+      # ===== 4. Expose Services via Cloudflare =====
       - name: Setup cloudflared
         uses: AnimMouse/setup-cloudflared@v2
 
-      # Tunnel for Exatorrent (port 3000)
       - name: Expose Exatorrent (3000)
         uses: AnimMouse/setup-cloudflared/tunnel@v2
         with:
           url: http://localhost:3000
           tunnel-name: exatorrent-tunnel
 
-      # Tunnel for KasmWeb (port 6901)
       - name: Expose KasmWeb Desktop (6901)
         uses: AnimMouse/setup-cloudflared/tunnel@v2
         with:
           url: http://localhost:6901
           tunnel-name: kasm-tunnel
 
-      # ===== 4. Keep Alive & Show URLs =====
+      # ===== 5. Print URLs =====
       - name: Print Tunnel URLs
         run: |
           echo "Exatorrent URL: https://${EXATORRENT_TUNNEL_URL}"
           echo "KasmWeb Desktop URL: https://${KASM_TUNNEL_URL}"
-          echo ""
-          echo "KasmWeb Credentials:"
           echo "Username: kasm_user"
-          echo "Password: yourpassword (set in step 2)"
+          echo "Password: yourpassword"
         env:
           EXATORRENT_TUNNEL_URL: ${{ steps.exatorrent-tunnel.outputs.url }}
           KASM_TUNNEL_URL: ${{ steps.kasm-tunnel.outputs.url }}
 
-      - name: Keep alive (max 6h)
-        run: sleep 21600  # GitHub's maximum timeout
+      - name: Keep alive
+        run: sleep 21600
