@@ -1,0 +1,71 @@
+name: Expose Exatorrent & Windows-KVM via Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  expose_services:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ===== 1. Start Exatorrent (Node.js) =====
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install and run Exatorrent
+        working-directory: ./my-app
+        run: |
+          npm install
+          npm run dev &
+          sleep 5
+          curl --retry 3 --retry-delay 2 http://localhost:3000
+
+      # ===== 2. Start Windows-KVM (Docker) =====
+      - name: Setup Docker and KVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-kvm libvirt-daemon-system
+          sudo usermod -a -G kvm $USER
+          docker run -d \
+           --name windows \
+           -p 8006:8006 \
+           -e "DISABLE_KVM=1" \  # Disable KVM requirement
+           dockurr/windows
+
+      # ===== 3. Expose Both Services via Cloudflare =====
+      - name: Setup cloudflared
+        uses: AnimMouse/setup-cloudflared@v2
+
+      # Tunnel for Exatorrent (port 3000)
+      - name: Expose Exatorrent (3000)
+        uses: AnimMouse/setup-cloudflared/tunnel@v2
+        with:
+          url: http://localhost:3000
+          tunnel-name: exatorrent-tunnel
+
+      # Tunnel for Windows-KVM (port 8006)
+      - name: Expose Windows-KVM (8006)
+        uses: AnimMouse/setup-cloudflared/tunnel@v2
+        with:
+          url: http://localhost:8006
+          tunnel-name: windows-tunnel
+
+      # ===== 4. Keep Alive & Show URLs =====
+      - name: Print Tunnel URLs
+        run: |
+          echo "Exatorrent URL: https://${EXATORRENT_TUNNEL_URL}"
+          echo "Windows-KVM URL: https://${WINDOWS_TUNNEL_URL}"
+        env:
+          EXATORRENT_TUNNEL_URL: ${{ steps.exatorrent-tunnel.outputs.url }}
+          WINDOWS_TUNNEL_URL: ${{ steps.windows-tunnel.outputs.url }}
+
+      - name: Keep alive (max 6h)
+        run: sleep 21600  # GitHub's maximum timeout
