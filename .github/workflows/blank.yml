@@ -8,31 +8,29 @@ jobs:
   debug:
     runs-on: ubuntu-latest
     steps:
-      # 1. Download previous artifacts (if any exist)
+      # 1. Checkout code first (needed before artifact download)
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Download previous artifacts (silent if none exist)
       - name: Download previous artifacts
         uses: actions/download-artifact@v4
         with:
           name: debug-session-data
           path: ./data/
-          if-no-files-found: warn  # Skip if no artifacts exist
+          if-no-files-found: ignore  # Changed from 'warn' to silent skip
 
-      # 2. Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # 3. Start interactive SSH session
+      # 3. Start SSH session
       - name: Start SSH session via tmate
         uses: mxschmitt/action-tmate@v3
         with:
           limit-access-to-actor: true
           
-      # 4. (After SSH ends) Upload new artifacts
+      # 4. Upload artifacts (even if SSH fails)
       - name: Upload session artifacts
-        if: always()  # Upload even if previous steps fail
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-session-data
-          path: |
-            ./data/
-            !**/node_modules  # Example: exclude node_modules
-          retention-days: 90
+          path: ./data/
+          retention-days: 7  # Shorter retention for debug artifacts
